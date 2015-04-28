@@ -49,7 +49,7 @@ os.system("mkdir -p " + dirname(params["outputPrefix"]))
 
 ssh_cmd = (
     "ssh "
-    #" -i ~/.ssh/aws_virginia.pem "
+    " -i /Users/pigwall/Documents/workspacenew/petuum-java-cmu-605/app/matrixfact_605/src/main/java/org/petuum/app/matrixfact/pigwall.pen "
     "-o StrictHostKeyChecking=no "
     "-o UserKnownHostsFile=/dev/null "
     #"-oLogLevel=quiet "
