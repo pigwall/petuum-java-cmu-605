@@ -92,12 +92,32 @@ public class MatrixFactCore {
         	//compute sqLoss and totalloss
         	sqLoss += Math.pow(rating-product(Li,Rj,K),2);
         	if(!lreg.contains(i)){
-        		totalLoss += product(Li,Li,K);
-        		lreg.add(i);
+        		if(i >= LRowBegin && i < LRowEnd){
+        			totalLoss += product(Li,Li,K);
+        			lreg.add(i);
+        		}
         	}
         	if(!rreg.contains(j)){
+        		if(i >= RRowBegin && i < RRowEnd){
+        			totalLoss += product(Rj,Rj,K);
+        			rreg.add(j);
+        		}
+        	}
+        }
+        for(int i = LRowBegin; i < LRowEnd; i++){
+        	if(!lreg.contains(i)){
+        		DoubleRow Li = new DenseDoubleRow(K+1);
+            	DoubleRow iRow = LTable.get(i);
+            	Li.reset(iRow);
+        		totalLoss += product(Li,Li,K);
+        	}
+        }
+        for(int i = RRowBegin; i < RRowEnd; i++){
+        	if(!lreg.contains(i)){
+        		DoubleRow Rj = new DenseDoubleRow(K+1);
+            	DoubleRow iRow = LTable.get(i);
+            	Rj.reset(iRow);
         		totalLoss += product(Rj,Rj,K);
-        		rreg.add(j);
         	}
         }
         totalLoss *= lambda;
