@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Set;
 
 public class MatrixFactCore {
     private static final Logger logger =
@@ -23,43 +24,44 @@ public class MatrixFactCore {
     // accordingly.
     public static void sgdOneRating(Rating r, double learningRate,
             DoubleTable LTable, DoubleTable RTable, int K, double lambda) {
-    	//get Li and Rj
-    	DoubleRow Li = new DenseDoubleRow(K+1);
-    	DoubleRow iRow = LTable.get(r.userId);
-    	Li.reset(iRow);
-    	DoubleRow Rj = new DenseDoubleRow(K+1);
-    	DoubleRow jRow = RTable.get(r.prodId);
-    	Rj.reset(jRow);
-    	//set ni,mj
-    	double ni = lambda/Li.getUnlocked(K);
-    	double mj = lambda/Rj.getUnlocked(K);
-    	double eij = (double)r.rating - product(Li,Rj,K);
-    	//update Li and Rj
-    	DoubleRowUpdate up_Li = learn(Li,Rj,learningRate,eij,ni,K);
-    	DoubleRowUpdate up_Rj = learn(Rj,Li,learningRate,eij,mj,K);
-    	//put updated Li and Rj back to tables?? update means covering?
-    	LTable.batchInc(r.userId, up_Li);
-    	LTable.batchInc(r.prodId, up_Rj);
-        // TODO
+        
+        // Calculate the gradient
+        DoubleRow rowCacheL = new DenseDoubleRow(K+1);
+        DoubleRow LRow = LTable.get(r.userId);
+        rowCacheL.reset(LRow);
+        double n_i = rowCacheL.getUnlocked(K);
+        
+        DoubleRow rowCacheR = new DenseDoubleRow(K+1);
+        DoubleRow RRow = RTable.get(r.prodId);
+        rowCacheR.reset(RRow);
+        double m_j = rowCacheR.getUnlocked(K);
+        
+        // calculate e_ij
+        double e_ij = r.rating;
+        for (int k = 0; k < K; ++k) {
+                e_ij -= rowCacheL.getUnlocked(k) * rowCacheR.getUnlocked(k);
+        }
+        
+        // update L table
+        DoubleRowUpdate updates = new DenseDoubleRowUpdate(K+1);
+        for (int k = 0; k < K; ++k) {
+            double delta = e_ij * rowCacheR.getUnlocked(k) - lambda / n_i
+                    * rowCacheL.getUnlocked(k);
+            updates.setUpdate(k, 2 * learningRate * delta);
+        }
+        LTable.batchInc(r.userId, updates);
+        
+        
+        // update R table
+        updates = new DenseDoubleRowUpdate(K+1);
+        for (int k = 0; k < K; ++k) {
+            double delta = e_ij * rowCacheL.getUnlocked(k) - lambda / m_j
+                    * rowCacheR.getUnlocked(k);
+            updates.setUpdate(k, 2 * learningRate * delta);
+        }
+        RTable.batchInc(r.prodId, updates);        
     }
-    public static DoubleRowUpdate learn(DoubleRow Li,DoubleRow Rj, double learningRate,double eij,double ni,int K){
-    	DoubleRowUpdate up_Li = new DenseDoubleRowUpdate(K+1);
-    	for(int i = 0; i < K; i++){
-    		double li = Li.getUnlocked(i);
-    		double rj = Rj.getUnlocked(i);
-    		double new_li = 2*learningRate*(eij*rj - ni*li);
-    		up_Li.setUpdate(i, new_li);
-    	}
-    	//up_Li.setUpdate(K, ni);
-    	return up_Li;
-    }
-    public static double product(DoubleRow Li, DoubleRow Rj, int K){
-    	double result = 0.0;
-    	for(int i = 0; i < K; i++){
-    		result += Li.getUnlocked(i)*Rj.getUnlocked(i);
-    	}
-    	return result;
-    }
+
     // Evaluate square loss on entries [elemBegin, elemEnd), and L2-loss on of
     // row [LRowBegin, LRowEnd) of LTable,  [RRowBegin, RRowEnd) of Rtable.
     // Note the interval does not include LRowEnd and RRowEnd. Record the loss to
@@ -68,89 +70,90 @@ public class MatrixFactCore {
             int elemBegin, int elemEnd, DoubleTable LTable,
             DoubleTable RTable, int LRowBegin, int LRowEnd, int RRowBegin,
             int RRowEnd, LossRecorder lossRecorder, int K, double lambda) {
-    	//no idea what elembegin and elemend is...
-        // TODO
-    	//initalization
+
         double sqLoss = 0;
         double totalLoss = 0;
-        HashSet<Integer> rreg = new HashSet<Integer>();
-        HashSet<Integer> lreg = new HashSet<Integer>();
-        for(int pointer = elemBegin; pointer < elemEnd; pointer++){
-        	//get rating
-        	int i = ratings.get(pointer).userId;
-        	int j = ratings.get(pointer).prodId;
-        	//double rating = (double)ratings.get(pointer).rating;
-        	
-        	//get Li and Rj
-        	DoubleRow Li = new DenseDoubleRow(K+1);
-        	DoubleRow iRow = LTable.get(i);
-        	Li.reset(iRow);
-        	DoubleRow Rj = new DenseDoubleRow(K+1);
-        	DoubleRow jRow = RTable.get(j);
-        	Rj.reset(jRow);
-        	
-        	//compute sqLoss and totalloss
-        	double rating = 0.0;
-        	for(int k = 0; k< K; k++){
-        		rating += Li.getUnlocked(k)*Rj.getUnlocked(k);
-        	}
-        	double diff = ratings.get(pointer).rating - rating;
-        	sqLoss += diff * diff;
-        	
-        	
-        	if(!lreg.contains(i)){
-        		if(i >= LRowBegin && i < LRowEnd){
-        			double loss = 0.0;
-        			for (int k = 0; k < K; k++){
-        				double w = Li.getUnlocked(k);
-        				loss += w*w;
-        			}
-        			totalLoss += loss;
-        			lreg.add(i);
-        		}
-        	}
-        	if(!rreg.contains(j)){
-        		if(i >= RRowBegin && i < RRowEnd){
-        			double loss = 0.0;
-        			for (int k = 0; k < K; k++){
-        				double w = Rj.getUnlocked(k);
-        				loss += w*w;
-        			}
-        			totalLoss += loss;
-        			rreg.add(j);
-        		}
-        	}
-        }
-        for(int i = LRowBegin; i < LRowEnd; i++){
-        	if(!lreg.contains(i)){
-        		DoubleRow Li = new DenseDoubleRow(K+1);
-            	DoubleRow iRow = LTable.get(i);
-            	Li.reset(iRow);
-        		
-            	double loss = 0.0;
+        Set<Integer> LSet = new HashSet<Integer>();
+        Set<Integer> RSet = new HashSet<Integer>();
+        
+        for (int i = elemBegin; i < elemEnd; ++i) {
+            Rating r = ratings.get(i);
+            
+            DoubleRow rowCacheL = new DenseDoubleRow(K+1);
+            DoubleRow LRow = LTable.get(r.userId);
+            rowCacheL.reset(LRow);
+            DoubleRow rowCacheR = new DenseDoubleRow(K+1);
+            DoubleRow RRow = RTable.get(r.prodId);
+            rowCacheR.reset(RRow);
+            
+            // calculate estimated rating
+            double rating = 0.0; 
+            for (int k = 0; k < K; ++k) {
+                rating += rowCacheL.getUnlocked(k) * rowCacheR.getUnlocked(k);
+            }
+            double diff = r.rating - rating;
+            sqLoss += diff * diff;
+            
+            // calculate regularization err
+            if (r.userId >= LRowBegin && r.userId < LRowEnd && !LSet.contains(r.userId)) {
+                LSet.add(r.userId);
+                double loss = 0.0;
                 for (int k = 0; k < K; ++k) {
-                    double w = Li.getUnlocked(k);
+                    double w = rowCacheL.getUnlocked(k);
                     loss += w * w;
                 }
                 totalLoss += loss;
-        	}
-        }
-        for(int i = RRowBegin; i < RRowEnd; i++){
-        	if(!lreg.contains(i)){
-        		DoubleRow Rj = new DenseDoubleRow(K+1);
-            	DoubleRow iRow = LTable.get(i);
-            	Rj.reset(iRow);
-        		
-            	double loss = 0.0;
+            }
+            
+            if (r.prodId >= RRowBegin && r.prodId < RRowEnd && !RSet.contains(r.prodId)) {
+                RSet.add(r.prodId);
+                double loss = 0.0;
                 for (int k = 0; k < K; ++k) {
-                    double w = Rj.getUnlocked(k);
+                    double w = rowCacheR.getUnlocked(k);
                     loss += w * w;
                 }
                 totalLoss += loss;
-        	}
+            }
         }
-        totalLoss *= lambda;
-        totalLoss += sqLoss;
+        
+        // regularization err
+        for (int row = LRowBegin; row < LRowEnd; ++row) {
+            if (LSet.contains(row)) {
+                continue;
+            }
+            
+            DoubleRow rowCacheL = new DenseDoubleRow(K+1);
+            DoubleRow LRow = LTable.get(row);
+            rowCacheL.reset(LRow);
+            
+            double loss = 0.0;
+            for (int k = 0; k < K; ++k) {
+                double w = rowCacheL.getUnlocked(k);
+                loss += w * w;
+            }
+            totalLoss += loss;
+        }
+        
+        for (int col = RRowBegin; col < RRowEnd; ++col) {
+            if (RSet.contains(col)) {
+                continue;
+            }
+            
+            DoubleRow rowCacheR = new DenseDoubleRow(K+1);
+            DoubleRow RRow = RTable.get(col);
+            rowCacheR.reset(RRow);
+            
+            double loss = 0.0;
+            for (int k = 0; k < K; ++k) {
+                double w = rowCacheR.getUnlocked(k);
+                loss += w * w;
+            }
+            totalLoss += loss;
+        }
+        
+        // apply lambda
+        totalLoss = totalLoss * lambda + sqLoss;        
+        
         lossRecorder.incLoss(ithEval, "SquareLoss", sqLoss);
         lossRecorder.incLoss(ithEval, "FullLoss", totalLoss);
         lossRecorder.incLoss(ithEval, "NumSamples", elemEnd - elemBegin);
