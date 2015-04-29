@@ -50,7 +50,7 @@ public class MatrixFactCore {
     		double new_li = 2*learningRate*(eij*rj - ni*li);
     		up_Li.setUpdate(i, new_li);
     	}
-    	up_Li.setUpdate(K, ni);
+    	//up_Li.setUpdate(K, ni);
     	return up_Li;
     }
     public static double product(DoubleRow Li, DoubleRow Rj, int K){
