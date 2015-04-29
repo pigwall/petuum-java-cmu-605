@@ -79,7 +79,7 @@ public class MatrixFactCore {
         	//get rating
         	int i = ratings.get(pointer).userId;
         	int j = ratings.get(pointer).prodId;
-        	double rating = (double)ratings.get(pointer).rating;
+        	//double rating = (double)ratings.get(pointer).rating;
         	
         	//get Li and Rj
         	DoubleRow Li = new DenseDoubleRow(K+1);
@@ -90,16 +90,33 @@ public class MatrixFactCore {
         	Rj.reset(jRow);
         	
         	//compute sqLoss and totalloss
-        	sqLoss += Math.pow(rating-product(Li,Rj,K),2);
+        	double rating = 0.0;
+        	for(int k = 0; k< K; k++){
+        		rating += Li.getUnlocked(k)*Rj.getUnlocked(k);
+        	}
+        	double diff = ratings.get(pointer).rating - rating;
+        	sqLoss += diff * diff;
+        	
+        	
         	if(!lreg.contains(i)){
         		if(i >= LRowBegin && i < LRowEnd){
-        			totalLoss += product(Li,Li,K);
+        			double loss = 0.0;
+        			for (int k = 0; k < K; k++){
+        				double w = Li.getUnlocked(k);
+        				loss += w*w;
+        			}
+        			totalLoss += loss;
         			lreg.add(i);
         		}
         	}
         	if(!rreg.contains(j)){
         		if(i >= RRowBegin && i < RRowEnd){
-        			totalLoss += product(Rj,Rj,K);
+        			double loss = 0.0;
+        			for (int k = 0; k < K; k++){
+        				double w = Rj.getUnlocked(k);
+        				loss += w*w;
+        			}
+        			totalLoss += loss;
         			rreg.add(j);
         		}
         	}
@@ -109,7 +126,13 @@ public class MatrixFactCore {
         		DoubleRow Li = new DenseDoubleRow(K+1);
             	DoubleRow iRow = LTable.get(i);
             	Li.reset(iRow);
-        		totalLoss += product(Li,Li,K);
+        		
+            	double loss = 0.0;
+                for (int k = 0; k < K; ++k) {
+                    double w = Li.getUnlocked(k);
+                    loss += w * w;
+                }
+                totalLoss += loss;
         	}
         }
         for(int i = RRowBegin; i < RRowEnd; i++){
@@ -117,7 +140,13 @@ public class MatrixFactCore {
         		DoubleRow Rj = new DenseDoubleRow(K+1);
             	DoubleRow iRow = LTable.get(i);
             	Rj.reset(iRow);
-        		totalLoss += product(Rj,Rj,K);
+        		
+            	double loss = 0.0;
+                for (int k = 0; k < K; ++k) {
+                    double w = Rj.getUnlocked(k);
+                    loss += w * w;
+                }
+                totalLoss += loss;
         	}
         }
         totalLoss *= lambda;
