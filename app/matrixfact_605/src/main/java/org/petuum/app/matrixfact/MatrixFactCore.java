@@ -47,7 +47,7 @@ public class MatrixFactCore {
     	for(int i = 0; i < K; i++){
     		double li = Li.getUnlocked(i);
     		double rj = Rj.getUnlocked(i);
-    		double new_li = li + 2*learningRate*(eij*rj - ni*li);
+    		double new_li = 2*learningRate*(eij*rj - ni*li);
     		up_Li.setUpdate(i, new_li);
     	}
     	up_Li.setUpdate(K, ni);
